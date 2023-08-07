@@ -1,0 +1,82 @@
+libname rg '/home/f20056360/';
+
+/*1. import  datasets*/
+proc import datafile='/home/f20056360/house_details.csv' 
+dbms=csv out=rg.house_details replace; run; 
+proc import datafile='/home/f20056360/dates_price.csv' 
+dbms=csv out=rg.dates_price replace; run; 
+proc import datafile='/home/f20056360/zip.csv' 
+dbms=csv out=rg.zip replace; run; 
+proc sql; create table rg.zip as 
+select city, state, zip_code, max(zip_code_population) as zip_code_population
+from rg.zip group by city, state, zip_code order by zip_code; quit;  
+
+/*2. merged dataset*/
+proc sql; create table rg.master as 
+select a.*, b.*, c.zip_code_population
+from rg.house_details as a 
+left join rg.dates_price as b
+on a.id = b.id
+left join rg.zip as c
+on a.zip_code = c.zip_code; quit; 
+
+/*3. each zip code */
+proc sql; select state, city, zip_code, zip_code_population, home_type, count(id) as id
+from rg.master group by state, city, zip_code, zip_code_population, home_type; quit; 
+
+/*4. bins */
+proc sql; create table temp1 as 
+select id, case when bed <= 1 then 'a. low-1' 
+when bed <= 3 then 'b. 2-3' 
+when bed <= 4 then 'c. 4'
+else 'd. 5-high' end as bed_bin, 
+case when bath <= 1 then 'a. low-1' 
+when bath <= 2 then 'b. 2' 
+when bath <= 3 then 'c. 3'
+else 'd. 4-high' end as bath_bin from rg.master; quit; 
+proc sql; select bath_bin, bed_bin, count(id) as id
+from temp1 group by bath_bin, bed_bin; quit; 
+
+proc sql; create table temp1 as 
+select id, case when house_size <= 800 then 'a. low-800' 
+when house_size <= 1500 then 'b. 801-1500' 
+when house_size <= 2200 then 'c. 1501-2200'
+else 'd. 2201-high' end as house_size_bin, 
+case when bed+bath <= 3 then 'a. low-3' 
+when bed+bath <= 5 then 'b. 4-5' 
+when bed+bath <= 6 then 'c. 6'
+else 'd. 7-high' end as bed_bath_bin from rg.master; quit; 
+proc sql; select bed_bath_bin, house_size_bin, count(id) as id
+from temp1 group by bed_bath_bin, house_size_bin; quit; 
+
+proc sql; select play_ground, swming_tank, count(id) as id
+from rg.master group by play_ground, swming_tank; quit; 
+
+/* 5. amount */
+proc sql; create table temp2 as 
+select id, case when listing_price <= 100000 then 'a. low-100K' 
+when listing_price <= 200000 then 'b. 100K-200K' 
+when listing_price <= 300000 then 'c. 200K-300K' 
+when listing_price <= 400000 then 'd. 300K-400K' 
+else 'e. 400K-high' end as listing_price_bin from rg.master; quit; 
+proc sql; select listing_price_bin, count(id) as id
+from temp2 group by listing_price_bin; quit; 
+
+proc sql; create table temp2 as 
+select id, case when actual_sold_price <= 100000 then 'a. low-100K' 
+when actual_sold_price <= 200000 then 'b. 100K-200K' 
+when actual_sold_price <= 300000 then 'c. 200K-300K' 
+when actual_sold_price <= 400000 then 'd. 300K-400K' 
+else 'e. 400K-high' end as actual_sold_price_bin from rg.master; quit; 
+proc sql; select actual_sold_price_bin, count(id) as id
+from temp2 group by actual_sold_price_bin; quit; 
+
+proc sql; select status, count(id) as id
+from rg.master group by status; quit; 
+
+proc sql; select state, city, zip_code,  
+min(listing_price) as min_listing_price, min(actual_sold_price) as min_actual_sold_price, 
+avg(listing_price) as avg_listing_price, avg(actual_sold_price) as avg_actual_sold_price, 
+max(listing_price) as max_listing_price, max(actual_sold_price) as max_actual_sold_price
+from rg.master group by state, city, zip_code; quit;
+
